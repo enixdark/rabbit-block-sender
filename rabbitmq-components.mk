@@ -5,16 +5,6 @@ ifeq ($(.DEFAULT_GOAL),)
 .DEFAULT_GOAL = all
 endif
 
-# Automatically add rabbitmq-common to the dependencies, at least for
-# the Makefiles.
-ifneq ($(PROJECT),rabbit_common)
-ifneq ($(PROJECT),rabbitmq_public_umbrella)
-ifeq ($(filter rabbit_common,$(DEPS)),)
-DEPS += rabbit_common
-endif
-endif
-endif
-
 # --------------------------------------------------------------------
 # RabbitMQ components.
 # --------------------------------------------------------------------
@@ -38,6 +28,7 @@ dep_rabbitmq_boot_steps_visualiser    = git_rmq rabbitmq-boot-steps-visualiser $
 dep_rabbitmq_clusterer                = git_rmq rabbitmq-clusterer $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_codegen                  = git_rmq rabbitmq-codegen $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_consistent_hash_exchange = git_rmq rabbitmq-consistent-hash-exchange $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_ct_helpers               = git_rmq rabbitmq-ct-helpers $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_delayed_message_exchange = git_rmq rabbitmq-delayed-message-exchange $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_dotnet_client            = git_rmq rabbitmq-dotnet-client $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_event_exchange           = git_rmq rabbitmq-event-exchange $(current_rmq_ref) $(base_rmq_ref) master
@@ -53,12 +44,14 @@ dep_rabbitmq_management_exchange      = git_rmq rabbitmq-management-exchange $(c
 dep_rabbitmq_management_themes        = git_rmq rabbitmq-management-themes $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_management_visualiser    = git_rmq rabbitmq-management-visualiser $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_message_timestamp        = git_rmq rabbitmq-message-timestamp $(current_rmq_ref) $(base_rmq_ref) master
-dep_rabbitmq_metronome                = git_rmq rabbitmq-metronome $(current_rmq_ref) $(base_rmq_ref) master
+# dep_rabbitmq_metronome                = git_rmq rabbitmq-metronome $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_block_sender             = git_rmq dep_rabbitmq-block-sender $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_mqtt                     = git_rmq rabbitmq-mqtt $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_objc_client              = git_rmq rabbitmq-objc-client $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_recent_history_exchange  = git_rmq rabbitmq-recent-history-exchange $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_routing_node_stamp       = git_rmq rabbitmq-routing-node-stamp $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_rtopic_exchange          = git_rmq rabbitmq-rtopic-exchange $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_server_release           = git_rmq rabbitmq-server-release $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_sharding                 = git_rmq rabbitmq-sharding $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_shovel                   = git_rmq rabbitmq-shovel $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_shovel_management        = git_rmq rabbitmq-shovel-management $(current_rmq_ref) $(base_rmq_ref) master
@@ -98,6 +91,7 @@ RABBITMQ_COMPONENTS = amqp_client \
 		      rabbitmq_clusterer \
 		      rabbitmq_codegen \
 		      rabbitmq_consistent_hash_exchange \
+		      rabbitmq_ct_helpers \
 		      rabbitmq_delayed_message_exchange \
 		      rabbitmq_dotnet_client \
 		      rabbitmq_event_exchange \
@@ -113,17 +107,17 @@ RABBITMQ_COMPONENTS = amqp_client \
 		      rabbitmq_management_themes \
 		      rabbitmq_management_visualiser \
 		      rabbitmq_message_timestamp \
-		      rabbitmq_metronome \
+		      rabbitmq_block_sender \
 		      rabbitmq_mqtt \
 		      rabbitmq_objc_client \
 		      rabbitmq_recent_history_exchange \
 		      rabbitmq_routing_node_stamp \
 		      rabbitmq_rtopic_exchange \
+		      rabbitmq_server_release \
 		      rabbitmq_sharding \
 		      rabbitmq_shovel \
 		      rabbitmq_shovel_management \
 		      rabbitmq_stomp \
-		      rabbitmq_test \
 		      rabbitmq_toke \
 		      rabbitmq_top \
 		      rabbitmq_tracing \
@@ -247,57 +241,8 @@ prepare-dist::
 	@:
 
 # --------------------------------------------------------------------
-# Run a RabbitMQ node (moved from rabbitmq-run.mk as a workaround).
-# --------------------------------------------------------------------
-
-# Add "rabbit" to the build dependencies when the user wants to start
-# a broker or to the test dependencies when the user wants to test a
-# project.
-#
-# NOTE: This should belong to rabbitmq-run.mk. Unfortunately, it is
-# loaded *after* erlang.mk which is too late to add a dependency. That's
-# why rabbitmq-components.mk knows the list of targets which start a
-# broker and add "rabbit" to the dependencies in this case.
-
-ifneq ($(PROJECT),rabbit)
-ifeq ($(filter rabbit,$(DEPS) $(BUILD_DEPS)),)
-RUN_RMQ_TARGETS = run-broker \
-		  run-background-broker \
-		  run-node \
-		  run-background-node \
-		  start-background-node
-
-ifneq ($(filter $(RUN_RMQ_TARGETS),$(MAKECMDGOALS)),)
-BUILD_DEPS += rabbit
-endif
-endif
-
-ifeq ($(filter rabbit,$(DEPS) $(BUILD_DEPS) $(TEST_DEPS)),)
-ifneq ($(filter check tests tests-with-broker test,$(MAKECMDGOALS)),)
-TEST_DEPS += rabbit
-endif
-endif
-endif
-
-ifeq ($(filter rabbit_public_umbrella amqp_client rabbit_common rabbitmq_test,$(PROJECT)),)
-ifeq ($(filter rabbitmq_test,$(DEPS) $(BUILD_DEPS) $(TEST_DEPS)),)
-TEST_DEPS += rabbitmq_test
-endif
-endif
-
-# --------------------------------------------------------------------
 # rabbitmq-components.mk checks.
 # --------------------------------------------------------------------
-
-ifeq ($(PROJECT),rabbit_common)
-else ifdef SKIP_RMQCOMP_CHECK
-else ifeq ($(IS_DEP),1)
-else ifneq ($(filter co up,$(MAKECMDGOALS)),)
-else
-# In all other cases, rabbitmq-components.mk must be in sync.
-deps:: check-rabbitmq-components.mk
-fetch-deps: check-rabbitmq-components.mk
-endif
 
 # If this project is under the Umbrella project, we override $(DEPS_DIR)
 # to point to the Umbrella's one. We also disable `make distclean` so
@@ -312,11 +257,6 @@ endif
 ifeq ($(UNDER_UMBRELLA),1)
 ifneq ($(PROJECT),rabbitmq_public_umbrella)
 DEPS_DIR ?= $(abspath ..)
-
-distclean:: distclean-components
-	@:
-
-distclean-components:
 endif
 
 ifneq ($(filter distclean distclean-deps,$(MAKECMDGOALS)),)
